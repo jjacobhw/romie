@@ -128,7 +128,7 @@ async function createConversation(username) {
         messages: [],
         users: [username],
     };
-    // Save conversation to Firebase
+    // Save conversation to PostgreSQL
     await pgClient.query('INSERT INTO conversations (inviteCode, messages, users) VALUES ($1, $2, $3)', [conversation.inviteCode, JSON.stringify(conversation.messages), conversation.users]);
 
     return inviteCode;
@@ -170,6 +170,7 @@ async function joinConversation(username, inviteCode) {
 
 /**
  * Refresh messages in conversation to the user's screen.
+ * TODO: Refresh only messages that aren't already displayed.
  * @param {integer} inviteCode - The invite code of the conversation to retrieve.
  * @return {boolean} True if the conversation was successfully retrieved, false otherwise.
  */
@@ -233,6 +234,7 @@ async function leaveConversation(username, inviteCode) {
 
 /**
  * Delete a conversation from PostgreSQL associated with the given invite code.
+ * Helper for leaveConversation.
  * @param {integer} inviteCode - The invite code of the conversation to delete.
  * @return {boolean} True if the conversation was successfully deleted, false otherwise.
  */
@@ -256,7 +258,7 @@ async function deleteConversation(inviteCode) {
  * @param {string} messageText - The text content of the message to send.
  * @param {string} attachments - Any attachments associated with the message.
  */
-async function sendMessage(username, inviteCode,messageText, attachments) {
+async function sendMessage(username, inviteCode, messageText, attachments) {
     // Add the message to the conversation in PostgreSQL
     await pgClient.query(
         'UPDATE conversations SET messages = array_prepend($1, messages) WHERE inviteCode = $2',
@@ -283,13 +285,13 @@ async function sendMessage(username, inviteCode,messageText, attachments) {
     return true;
 }
 
-function readMessages() {}
-
-function shareInviteCode() {}
-
-function syncMessages() {}
-
+/**
+ * Upload a media file to the server.
+ * Helper for sendMessage.
+ * @param {File} file - The media file to upload.
+ */
 function uploadMedia(file) {}
 
-// TODO: function signInUser(username, password) {}
-// TODO: function signOutUser() {}
+// TODO: Implement both of these later if there is time
+// function signInUser(username, password) {}
+// function signOutUser() {}
