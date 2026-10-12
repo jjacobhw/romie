@@ -1,16 +1,17 @@
 /*
  * Romie Texting Module
  * Provides functions to manage user accounts, conversations, and messages in PostgreSQL.
- * All error messages are logged to the console.
- */
+ * All error messages are logged to the console. */
 
 /**
  * Creates a user account with an username and password, adds them to PostgreSQL, 
  * and returns the user object.
  * @param {string} username - The username for the new account.
  * @param {string} password - The password for the new account.
- * @returns {Object} The created (or already existing) user object.
- */
+ * @returns {Object} The created (or already existing) user object. */
+
+const crypto = require('crypto');
+
 function createAccount(username, password) {
     // Return error is username already exists in PostgreSQL
     let userRef = pgClient.query('SELECT * FROM users WHERE name = $1', [username]);
@@ -37,8 +38,8 @@ function createAccount(username, password) {
  * Update the user's username in PostgreSQL.
  * @param {string} oldUsername - The current username of the user.
  * @param {string} newUsername - The new username for the user.
- * @return {boolean} True if the user is in the database, false otherwise.
- */
+ * @return {boolean} True if the user is in the database, false otherwise. */
+
 function updateProfileUsername(oldUsername, newUsername) {
     // Update the user's username in PostgreSQL
     let userRef = pgClient.query('SELECT * FROM users WHERE name = $1', [oldUsername]);
@@ -56,8 +57,8 @@ function updateProfileUsername(oldUsername, newUsername) {
  * Update the user's profile picture (avatar URL) in PostgreSQL.
  * @param {string} username - The username of the user to update.
  * @param {string} avatarUrl - The new avatar URL for the user.
- * @return {boolean} True if the user is in the database, false otherwise.
- */
+ * @return {boolean} True if the user is in the database, false otherwise. */
+
 function updateProfilePic(username, avatarUrl) {
     // Update the user's profile in PostgreSQL
     let userRef = pgClient.query('SELECT * FROM users WHERE name = $1', [username]);
@@ -74,8 +75,8 @@ function updateProfilePic(username, avatarUrl) {
 /**
  * Delete the user's account from PostgreSQL (if no account is found, prints error and does nothing)
  * @param {string} username - The username of the user to delete.
- * @return {boolean} True if the user was deleted, false otherwise.
- */
+ * @return {boolean} True if the user was deleted, false otherwise. */
+
 function deleteAccount(username) {
     let userRef = pgClient.query('SELECT * FROM users WHERE name = $1', [username]);
     userRef.then((result) => {
@@ -99,37 +100,57 @@ function deleteAccount(username) {
  * Initialize a chat room in PostgreSQL and return an invite code to it.
  * @param {string} username - The username of the user creating the conversation.
  * @returns {integer} The invite code for the created conversation, 
- * or -1 if the user is already in a conversation or does not exist.
- */
+ * or -1 if the user is already in a conversation or does not exist. */
+
 async function createConversation(username) {
     // Check if the user exists
-    let userRef = pgClient.query('SELECT * FROM users WHERE name = $1', [username]);
-    let userResult = await userRef;
+    const userResult = await pgClient.query('SELECT 1 FROM users WHERE name = \$1', [username]);
     if (userResult.rows.length === 0) {
         console.error(`User ${username} not found.`);
         return -1;
     }
     // Check if the user is already in an active conversation
-    let userConversationsRef = pgClient.query('SELECT * FROM conversations WHERE $1 = ANY(users)', [username]);
-    let userConversationsResult = await userConversationsRef;
+    const userConversationsResult = await pgClient.query(
+        'SELECT invitecode FROM conversations WHERE \$1 = ANY(users)', 
+        [username]
+    );
     if (userConversationsResult.rows.length !== 0) {
         console.error(`User ${username} is already in a conversation with invite code ${userConversationsResult.rows[0].invitecode}.`);
         return -1;
     }
-    // Generate a unique invite code
+    
+    // Generate secure, unique invite code safely
     let inviteCode;
-    do {
-        inviteCode = Math.random().toString(36).substring(2, 8);
-        var existing = await pgClient.query('SELECT * FROM conversations WHERE inviteCode = $1', [inviteCode]);
-    } while (existing.rows.length !== 0);
-    // Initialize a conversation with generated invite code
-    let conversation = {
+    let isUnique = false;
+    let attempts = 0;
+    while (!isUnique && attempts < 5) {
+        // Cryptographic 6-character hex string
+        inviteCode = crypto.randomBytes(3).toString('hex');
+        const existing = await pgClient.query('SELECT 1 FROM conversations WHERE invitecode = \$1', [inviteCode]);
+        if (existing.rows.length === 0) {
+            isUnique = true;
+        } else {
+            attempts++;
+            console.warn(`Invite code collision detected for ${inviteCode}. Retrying...`);
+        }
+    }
+    if (!isUnique) {
+        console.error("Failed to generate unique invite code after maximum attempts.");
+        return -1;
+    }
+    
+    // Initialize conversation object
+    const conversation = {
         inviteCode: inviteCode,
         messages: [],
         users: [username],
     };
-    // Save conversation to Firebase
-    await pgClient.query('INSERT INTO conversations (inviteCode, messages, users) VALUES ($1, $2, $3)', [conversation.inviteCode, JSON.stringify(conversation.messages), conversation.users]);
+
+    // Save conversation to PostgreSQL database
+    await pgClient.query(
+        'INSERT INTO conversations (invitecode, messages, users) VALUES (\$1, \$2, \$3)', 
+        [conversation.inviteCode, JSON.stringify(conversation.messages), conversation.users]
+    );
 
     return inviteCode;
 }
@@ -283,6 +304,7 @@ async function sendMessage(username, inviteCode,messageText, attachments) {
     return true;
 }
 
+// 
 function readMessages() {}
 
 function shareInviteCode() {}
