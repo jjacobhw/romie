@@ -111,9 +111,7 @@ async function createConversation(username) {
     }
     // Check if the user is already in an active conversation
     const userConversationsResult = await pgClient.query(
-        'SELECT invitecode FROM conversations WHERE \$1 = ANY(users)', 
-        [username]
-    );
+        'SELECT invitecode FROM conversations WHERE \$1 = ANY(users)', [username]);
     if (userConversationsResult.rows.length !== 0) {
         console.error(`User ${username} is already in a conversation with invite code ${userConversationsResult.rows[0].invitecode}.`);
         return -1;
